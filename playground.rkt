@@ -10,14 +10,14 @@
         (begin (displayln (+ a b)) (myloop)))))
 
 (define (solve-coin n coins)
-  (cond ((< n 0) 0)
-        ((= n 0) 1)
+  (cond ((negative? n) 0)
+        ((zero? n) 1)
         ((equal? coins '()) 0)
         (else
          (+ (solve-coin (- n (car coins)) coins)
             (solve-coin n (cdr coins))))))
 
-(define (f n)
+(define (f0 n)
   (define (f-iter x y z n)
     (if (< n 3)
         x
@@ -38,14 +38,14 @@
 (define (sqr x) (* x x))
 
 (define (expt b n)
-  (cond ((= n 0) 1)
+  (cond ((zero? n) 1)
         ((even? n)
          (sqr (expt b (/ n 2))))
         (else (* b (expt b (- n 1))))))
 
 (define (expt-fast b n)
   (define (expt-iter b n a)
-    (cond ((= n 0) a)
+    (cond ((zero? n) a)
           ((even? n)
            (expt-iter (sqr b) (/ n 2) a))
           (else
@@ -53,7 +53,7 @@
   (expt-iter b n 1))
 
 (define (expt-naive b n)
-  (if (= n 0)
+  (if (zero? n)
       1
       (* b (expt-naive b (- n 1)))))
 
@@ -170,3 +170,83 @@
   (define (pred? t)
     (= 1 (gcd n t)))
   (filtered-accumulate * 1 (lambda (x) x) 1 (lambda (x) (+ x 1)) n pred?))
+
+; half interval method for finding the root of given function
+(define (search f neg-point pos-point)
+  (define (close-enough? x y)
+    (< (abs (- x y)) 0.0000001))
+  (define (average x y) (/ (+ x y) 2))
+  (let ((midpoint (average neg-point pos-point)))
+    (if (close-enough? neg-point pos-point)
+        midpoint
+        (let ((test-value (f midpoint)))
+          (cond ((positive? test-value)
+                 (search f neg-point midpoint))
+                ((negative? test-value)
+                 (search f midpoint pos-point))
+                (else midpoint))))))
+
+; wrapper around search to ensure that a and b satisfy the sign constraints
+(define (half-interval-method f a b)
+  (let ((a-value (f a))
+        (b-value (f b)))
+    (cond ((and (negative? a-value) (positive? b-value))
+           (search f a b))
+          ((and (positive? a-value) (negative? b-value))
+           (search f b a))
+          ((zero? a-value) a)
+          ((zero? b-value) b)
+          (else
+           (error "Values are not of opposite sign on" a b)))))
+
+; calculate the fixed-point of f
+; test with: (fixed-point (lambda (x) (/ (log 1000) (log x))) 2.0)
+; golden ratio: fixed point of x |-> 1 + 1/x
+(define (fixed-point f first-guess)
+  (define (average x y) (/ (+ x y) 2))
+  (define (close-enough? x y)
+    (< (abs (- x y)) 0.00000001))
+  (define (try guess)
+    (let ((next (f guess)))
+      (if (close-enough? guess next)
+          next
+          (begin (display "trying ") (display next) (newline)
+                 (try (average next guess))  ; with average damping
+                 ;(try next)                 ; without
+                 ))))
+  (try first-guess))
+
+; compute k-term finite continued fraction with N and D denoted by unary functions n and d
+(define (cont-frac n d k)
+  (if (zero? k) 0
+      (let ((new-n (lambda (x) (n (+ x 1))))
+            (new-d (lambda (x) (d (+ x 1)))))
+        (/ (n 1)
+           (+ (d 1) (cont-frac new-n new-d (- k 1)))))))
+
+; iterative version of cont-frac
+; calculation from bottom up (i.e. starting from k) is needed
+; test with: substitude cont-frac below with cont-frac-iter (at * mark)
+(define (cont-frac-iter n d k)
+  (define (iter curr result)
+    (if (= 1 curr)    ; stop at N1 as we picked curr - 1 later on
+        result
+        (let ((next (- curr 1)))
+          (iter next
+                (/ (n next)
+                   (+ (d next) result))))))
+  (iter k
+        (/ (n k) (d k))))
+
+; print out the results of k-term finite fraction results when calculating the
+; golden ratio with cont-frac
+; test with: (seq 20) (expected precision: 1e-7)
+(define (seq k)
+  (define (precision k)
+    (cont-frac (lambda (i) 1.0) (lambda (i) 1.0) k))   ; *
+  (define (iter curr)
+    (if (> curr k) (void)
+        (let ((res (precision curr)))
+          (begin (display curr) (display "-term fraction result: ") (displayln res)
+                 (iter (+ curr 1))))))
+  (iter 1))
