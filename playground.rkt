@@ -250,3 +250,24 @@
           (begin (display curr) (display "-term fraction result: ") (displayln res)
                  (iter (+ curr 1))))))
   (iter 1))
+
+; calculate e according to continual fraction expansion from Leonhard Euler
+; n: 1 1 1 1 1 1 1 1 1 1 1 ...
+; d: 1 2 1 1 4 1 1 6 1 1 8 ...
+(define (e n)
+  (+ 2 (cont-frac-iter (lambda (_) 1.0)
+                       (lambda (x)
+                         (match (remainder x 3)
+                           (2 (* 2 (+ 1 (floor (/ x 3)))))
+                           (_ 1)))
+                       n)))
+
+; calculate tangent with continued fraction from J.H. Lambert
+; calculate -x*tan(x) first
+(define (tan-cf x k)
+  (define result
+    (cont-frac-iter (lambda (_) (- (square x)))
+                    (lambda (t) (- (* 2 t) 1))
+                    k))
+  (if (zero? x) 0
+      (- (/ result x))))
