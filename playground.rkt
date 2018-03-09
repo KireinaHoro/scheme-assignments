@@ -1,14 +1,13 @@
 #lang racket
+
+(include "primality.rkt")
+
 (define (myloop)
   (let ((a (read))
         (b (read)))
     (if (eq? a eof)
         (void)
         (begin (displayln (+ a b)) (myloop)))))
-
-(define (square x)
-  (define (double x) (+ x x))
-  (exp (double (log x))))
 
 (define (solve-coin n coins)
   (cond ((< n 0) 0)
@@ -90,3 +89,84 @@
       1
       (+ (fib-naive (- n 1))
          (fib-naive (- n 2)))))
+
+(define (sum term a next b)
+  (if (> a b)
+      0
+      (+ (term a)
+         (sum term (next a) next b))))
+
+(define (sum-iter term a next b)
+  (define (iter a result)
+    (if (> a b)
+        result
+        (iter (next a) (+ result (term a)))))
+  (iter a 0))
+
+(define (integral f a b dx)
+  (define (add-dx x) (+ x dx))
+  (* (sum f (+ a (/ dx 2.0)) add-dx b)
+     dx))
+
+(define (simpson-integral f a b n)
+  (let ((h (/ (- b a) n)))
+    (define (next x) (+ x h))
+    (define term
+      (lambda (i) (lambda (x)
+                    (if (even? i) (* 2 (f x))
+                        (* 4 (f x))))))
+    (define (sum* term a next b counter)
+      (if (> a b)
+          0
+          (+ ((term counter) a)
+             (sum* term (next a) next b (+ counter 1)))))
+    (* (/ h 3)
+       (+ (f a) (f b)
+          (sum* term (+ a h) next (- b h) 1)))))
+
+(define (product term a next b)
+  (define (iter curr result)
+    (if (> curr b)
+        result
+        (iter (next curr) (* result (term curr)))))
+  (iter a 1))
+
+(define (fac n)
+  (product (lambda (x) x) 1 (lambda (x) (+ 1 x)) n))
+
+(define (pi-product last-elem)
+  (* 2
+     (product (lambda (x) (square (/ (+ x 1) x)))
+              3 (lambda (x) (+ x 2)) last-elem)
+     (/ 1 (- last-elem 1))))
+
+(define (accumulate combiner null-value term a next b)
+  (define (iter curr result)
+    (if (> curr b)
+        result
+        (iter (next curr) (combiner result (term curr)))))
+  (iter a null-value))
+
+(define (accumulate-recur combiner null-value term a next b)
+  (if (> a b)
+      null-value
+      (combiner (term a)
+                (accumulate-recur combiner null-value term (next a) next b))))
+
+(define (filtered-accumulate combiner null-value term a next b predicate)
+  (if (> a b)
+      null-value
+      (let ((rest (filtered-accumulate combiner null-value term (next a) next b predicate))
+            (curr (term a)))
+        (if (predicate a)   ; test on the current a
+            (combiner curr rest)
+            rest))))
+
+(define (f1 a b)   ; the sum of the squares of the prime numbers in the interval a to b
+  (filtered-accumulate + 0 square a (lambda (x) (+ x 1)) b naive-prime?))
+
+(define (f2 n)     ; the product of all the positive integers less than n that are
+                   ; relatively prime to n (i.e., all positive integers i < n such that GCD(i,n) = 1).
+  (define (pred? t)
+    (= 1 (gcd n t)))
+  (filtered-accumulate * 1 (lambda (x) x) 1 (lambda (x) (+ x 1)) n pred?))
