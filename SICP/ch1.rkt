@@ -389,6 +389,20 @@
   (fixed-point-of-transform
    target-f (repeated average-damp times) 1.0))
 
+; test with transform function for precise tests of convergence
+(define (nth-root-experiment-with-transform x n transform starting)
+  (define (target-f t)
+    (/ x (expt t (- n 1))))
+  (fixed-point-of-transform-print
+   target-f transform starting))
+
+; transform the function according to the given weight t
+(define (magic-trans t)
+  (define (t-trans f)
+    (lambda (x) (+ (* t x)
+                   (* (- 1 t) (f x)))))
+  t-trans)
+
 (define (reliable-nth-root x n)
   (define times (floor (log n 2)))
   (nth-root-experiment x n times))
