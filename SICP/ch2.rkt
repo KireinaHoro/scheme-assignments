@@ -122,6 +122,9 @@
   (lambda (f) (lambda (x) (f ((n f) x)))))  ; apply f once more time
 (define one (lambda (f) (lambda (x) (f x))))
 (define two (lambda (f) (lambda (x) (f (f x)))))
+(define (add n1 n2)
+  (lambda (f)
+    (compose (n1 f) (n2 f))))
 
 ; Ex2.7 - interval arithmetics
 (define (add-interval x y)
