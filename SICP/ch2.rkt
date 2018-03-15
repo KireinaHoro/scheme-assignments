@@ -184,3 +184,193 @@
     (div-interval one
                   (add-interval (div-interval one r1)
                                 (div-interval one r2)))))
+; Ex2.17
+(define (last-pair list)
+  (cond ((null? list) (error "last-pair: empty list given"))
+        ((null? (cdr list)) list)
+        (else (last-pair (cdr list)))))
+
+; Ex2.18
+(define (reverse lst)
+  (cond ((null? lst) lst)
+        ((null? (cdr lst)) lst)
+        (else
+         (append (reverse (cdr lst)) (list (car lst))))))
+
+; Ex2.19
+(define (cc amount coin-values)
+  (define no-more? null?)
+  (define except-first-denomination cdr)
+  (define first-denomination car)
+  (cond ((= amount 0) 1)
+        ((or (< amount 0) (no-more? coin-values)) 0)
+        (else
+         (+ (cc amount
+                (except-first-denomination coin-values))
+            (cc (- amount
+                   (first-denomination coin-values))
+                coin-values)))))
+(define us-coins (list 50 25 10 5 1))
+(define uk-coins (list 100 50 20 10 5 2 1 0.5))
+
+; Ex2.20
+; test with (same-parity 1 2 3 4 5 6 7) / (same-parity 2 3 4 5 6 7)
+(define (same-parity h . l)
+  (define parity (remainder h 2))
+  (define (find-parity l)
+    (cond ((null? l) l)
+          ((eq? (remainder (car l) 2) parity)
+           (cons (car l) (find-parity (cdr l))))
+          (else
+           (find-parity (cdr l)))))
+  (cons h (find-parity l)))
+
+; Ex2.21
+(define (square x) (* x x))
+(define (square-list-1 items)
+  (if (null? items)
+      null
+      (cons (square (car items)) (square-list-1 (cdr items)))))
+
+(define (square-list-2 items)
+  (map square items))
+
+; Ex2.23
+(define (my-for-each f l)
+  (if (null? l)
+      (void)
+      (begin (f (car l)) (my-for-each f (cdr l)))))
+
+; Ex2.24
+(define (count-leaves x)
+  (cond ((null? x) 0)
+        ((not (list? x)) 1)
+        (else (+ (count-leaves (car x))
+                 (count-leaves (cdr x))))))
+
+; Ex2.27
+(define (deep-reverse l)
+  (cond ((null? l) l)
+        ((list? (car l))
+         (append (deep-reverse (cdr l))
+                 (list (deep-reverse (car l)))))
+        (else
+         (append (deep-reverse (cdr l))
+                 (list (car l))))))
+
+; Ex2.28
+(define (fringe l)
+  (cond ((null? l) l)
+        ((list? (car l))
+         (append (fringe (car l)) (fringe (cdr l))))
+        (else
+         (append (list (car l)) (fringe (cdr l))))))
+
+; Ex2.29
+; a) data structure functions
+(define make-mobile list)
+(define make-branch list)
+(define left-branch car)
+(define right-branch cadr)
+(define branch-length left-branch)
+(define branch-contents right-branch)
+
+; d) use cons for representation
+(define make-mobile-new cons)
+(define make-branch-new cons)
+(define left-branch-new car)
+(define right-branch-new cdr)
+(define branch-length-new left-branch-new)
+(define branch-contents-new right-branch-new)
+
+; b) calculate the total weight of a mobile
+(define (total-weight m)
+  (define (proc-contents c)
+    (if (list? c)
+        (total-weight c)
+        c))
+  (let ((left (branch-contents (left-branch m)))
+        (right (branch-contents (right-branch m))))
+    (+ (proc-contents left)
+       (proc-contents right))))
+
+; c) test if a mobile is balanced
+(define (balanced? m)
+  (define mobile? list?)
+  (define (get ff choice)
+    (define f
+      (if (eq? choice 0)
+          (compose1 ff left-branch)
+          (compose1 ff right-branch)))
+    (f m))
+  (define (get-c choice) (get branch-contents choice)) ; get contents based on choice
+  (define (get-l choice) (get branch-length choice))   ; get length based on choice
+  (define (test choice) (mobile? (get-c choice)))      ; test if is mobile based on choice
+  (define (sub-balanced? choice)                       ; test if branch is balanced
+    (if (test choice)
+        (balanced? (get-c choice))
+        #t))
+  (define (torque choice)              ; calculate torque based on choice
+    (let ((c (get-c choice)))
+      (* (get-l choice)
+         (if (test choice)
+             (total-weight (get-c choice))
+             (get-c choice)))))
+  (and (sub-balanced? 0)               ; the branches should be balanced...
+       (sub-balanced? 1)
+       (eq? (torque 0) (torque 1))))   ; and the mobile itself
+
+; mobiles for test purposes
+(define test-mobile-unbalanced    ; an unbalanced mobile
+  (make-mobile
+   (make-branch 3 5)
+   (make-branch 5 (make-mobile
+                   (make-branch 1 3)
+                                     (make-branch 2 4)))))
+(define test-mobile-balanced      ; a balanced mobile
+  (make-mobile
+   (make-branch 2 5)
+   (make-branch 1 (make-mobile
+                   (make-branch 3 (make-mobile
+                                   (make-branch 1 2)
+                                   (make-branch 1 2)))
+                   (make-branch 2 (make-mobile
+                                   (make-branch 1 4)
+                                   (make-branch 2 2)))))))
+
+; Ex2.30
+; test with (square-tree (list 1 (list 2 (list 3 4) 5) (list 6 7)))
+(define (square-tree t)
+  (map (lambda (sub-t)
+         (cond ((not (list? sub-t)) (square sub-t))
+               ((null? sub-t) sub-t)
+               (else
+                (square-tree sub-t))))
+       t))
+
+(define (square-tree-direct t)
+  (cond ((not (list? t)) (square t))
+        ((null? t) t)
+        (else
+         (cons (square-tree-direct (car t))
+               (square-tree-direct (cdr t))))))
+
+; Ex2.31
+; test with (define (st t) (tree-map square t))
+(define (tree-map f t)
+  (map (lambda (sub-t)
+         (cond ((not (list? sub-t)) (f sub-t))
+               ((null? sub-t) sub-t)
+               (else
+                (tree-map f sub-t))))
+       t))
+
+; Ex2.32
+; test with (subsets (list 1 2 3))
+(define (subsets s)
+  (if (null? s)
+      (list null)
+      (let ((rest (subsets (cdr s))))
+        (append rest (map (lambda (x)
+                            (cons (car s) x))
+                          rest)))))
