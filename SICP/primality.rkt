@@ -1,3 +1,5 @@
+#lang racket
+(provide fast-prime?)
 (define (square x) (* x x))
 
 (define (smallest-div n)
