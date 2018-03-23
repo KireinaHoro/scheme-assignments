@@ -2,10 +2,12 @@
 (define (cons x y)
   (lambda (m) (m x y)))
 
+;
 (define (car t)
   (t (lambda (x _) x)))
 (define (cdr t)
   (t (lambda (_ x) x)))
+;
 
 (displayln (car (cons 1 2)))
 (displayln (cdr  (cons 1 2)))
