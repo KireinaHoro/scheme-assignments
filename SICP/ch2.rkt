@@ -115,7 +115,7 @@
 ; applied in a transform
 
 ; for demonstrating the process; call with ((n base) 0) to see corresponding number
-(define (base x) (+ 1 x))
+;(define (base x) (+ 1 x))
 
 (define zero (lambda (f) (lambda (x) x)))   ; \_ -> ids
 (define (add-1 n)
@@ -520,7 +520,7 @@
                           i)))
               (enumerate-interval 1 (- k 1))))
     (and (null? (filter (lambda (x) (eq? x (car pos)))
-                          (cdr pos)))
+                        (cdr pos)))
          (check-cross?)))
   (define (adjoin-position new-row k rest-of-queens)
     (cons new-row rest-of-queens))
@@ -575,9 +575,9 @@
   (let ((combine4 (square-of-four flip-horiz identity
                                   (compose1 flip-horiz flip-vert) flip-vert)))
     (combine4 (corner-split ;(flip-horiz ; Ex2.52.c
-                             painter
-                             ;)          ; Ex2.52.c
-                            n))))
+               painter
+               ;)          ; Ex2.52.c
+               n))))
 
 ; Ex2.45
 ; (define right-split (split beside below))
@@ -636,7 +636,7 @@
   ((apply transform-painter (list (origin-frame frame)                                  ; origin
                                   (add-vect (edge1-frame frame) (origin-frame frame))   ; bottom-right
                                   (add-vect (edge2-frame frame) (origin-frame frame)))) ; top-left
-          p))
+   p))
 (define cross-painter
   (segments->painter (list (make-segment (make-vect 0 0) (make-vect 1 1))
                            (make-segment (make-vect 0 1) (make-vect 1 0)))))
@@ -645,3 +645,92 @@
                            (make-segment (make-vect 1 0.5) (make-vect 0.5 1))
                            (make-segment (make-vect 0.5 1) (make-vect 0 0.5))
                            (make-segment (make-vect 0 0.5) (make-vect 0.5 0)))))
+
+; Ex2.53
+; (list 'a 'b 'c): '(a b c)
+; (list (list 'george)): '((george))
+; (cdr '((x1 x2) (y1 y2))): '((y1 y2))
+; (cadr '((x1 x2) (y1 y2))): '(y1 y2)
+; (pair? (car '(a short list))): #f
+; (memq 'red '((red shoes) (blue socks))): #f
+; (memq 'red '(red shoes blue socks)): '(red shoes blue socks)
+
+; Ex2.54
+(define (my-equal? l1 l2)
+  (cond ((not (or (pair? l1) (pair? l2)))       ; both not pairs
+         (eq? l1 l2))
+        ((not (and (pair? l1) (pair? l2))) #f)  ; only one of l1 and l2 is pair
+        (else
+         (and (my-equal? (car l1) (car l2))
+              (my-equal? (cdr l1) (cdr l2))))))
+
+; Ex2.55
+; (note: in Racket (car ''aa) prints 'quote)
+; ''abraacadabra == (quote (quote abracadabra))
+;                == (list 'quote 'abracadabra)
+
+(define (variable? e)
+  (cond ((pair? e) false)
+        ((not (symbol? e)) false)
+        ((eq? e '+) false)
+        ((eq? e '*) false)
+        ((eq? e '**) false)
+        (else true)))
+(define (same-variable? v1 v2)
+  (and (variable? v1) (variable? v2) (eq? v1 v2)))
+(define (sum? e)
+  (and (pair? e) (eq? (car e) '+)))
+(define addend cadr)
+(define (augend e)
+  (cond ((null? (cdddr e)) (caddr e))
+        (else (cons '+ (cddr e)))))     ; Ex2.57
+(define (=number? e n)
+  (and (number? e) (= e n)))
+(define (make-sum a1 a2)
+  (cond ((=number? a1 0) a2)
+        ((=number? a2 0) a1)
+        (else (list '+ a1 a2))))
+(define (product? e)
+  (and (pair? e) (eq? (car e) '*)))
+(define multiplier cadr)
+(define (multiplicand e)
+  (cond ((null? (cdddr e)) (caddr e))
+        (else (cons '* (cddr e)))))     ; Ex2.57
+(define (make-product m1 m2)
+  (cond ((=number? m1 1) m2)
+        ((=number? m2 1) m1)
+        ((or (=number? m1 0) (=number? m2 0)) 0)
+        (else (list '* m1 m2))))
+; Ex2.56
+(define (exponentation? e)
+  (and (pair? e) (eq? (car e) '**)
+       (number? (exponent e))))
+(define (make-exponentation b p)
+  (cond ((=number? p 0) 1)
+        ((=number? p 1) b)
+        (else (list '** b p))))
+(define base cadr)
+(define exponent caddr)
+
+(define (deriv exp var)
+  (cond ((number? exp) 0)
+        ((variable? exp)
+         (if (same-variable? exp var) 1 0))
+        ((sum? exp)
+         (make-sum (deriv (addend exp) var)
+                   (deriv (augend exp) var)))
+        ((product? exp)
+         (make-sum
+          (make-product (multiplier exp)
+                        (deriv (multiplicand exp) var))
+          (make-product (deriv (multiplier exp) var)
+                        (multiplicand exp))))
+        ((exponentation? exp)
+         (make-product
+          (deriv (base exp) var)
+          (make-product (exponent exp)
+                        (make-exponentation (base exp) (- (exponent exp) 1)))))
+        (else
+         (error "unknown expression type -- DERIV" exp))))
+
+; Ex2.57 & Ex2.58 in separate file: infix-deriv.rkt
