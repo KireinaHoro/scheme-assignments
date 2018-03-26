@@ -2,7 +2,7 @@
 
 ; utility function
 (define (average . args)
-  (if (empty? args)
+  (if (null? args)
       (error "average: empty parameter list")
       (/ (foldl + 0 args) (length args))))
 
@@ -325,18 +325,18 @@
   (make-mobile
    (make-branch-mobile 3 5)
    (make-branch-mobile 5 (make-mobile
-                   (make-branch-mobile 1 3)
-                   (make-branch-mobile 2 4)))))
+                          (make-branch-mobile 1 3)
+                          (make-branch-mobile 2 4)))))
 (define test-mobile-balanced      ; a balanced mobile
   (make-mobile
    (make-branch-mobile 2 5)
    (make-branch-mobile 1 (make-mobile
-                   (make-branch-mobile 3 (make-mobile
-                                   (make-branch-mobile 1 2)
-                                   (make-branch-mobile 1 2)))
-                   (make-branch-mobile 2 (make-mobile
-                                   (make-branch-mobile 1 4)
-                                   (make-branch-mobile 2 2)))))))
+                          (make-branch-mobile 3 (make-mobile
+                                                 (make-branch-mobile 1 2)
+                                                 (make-branch-mobile 1 2)))
+                          (make-branch-mobile 2 (make-mobile
+                                                 (make-branch-mobile 1 4)
+                                                 (make-branch-mobile 2 2)))))))
 
 ; Ex2.30
 ; test with (square-tree (list 1 (list 2 (list 3 4) 5) (list 6 7)))
@@ -456,7 +456,7 @@
 
 ; import fast-prime? from primality.rkt
 (require (only-in "primality.rkt"
-                  [fast-prime? prime?]))
+                  (fast-prime? prime?)))
 (define (prime-sum? p)
   (prime? (+ (car p) (cadr p))))
 (define (make-pair-sum p)
@@ -919,3 +919,123 @@
          (lookup k (left-branch db)))
         ((> k (key (entry db)))
          (lookup k (right-branch db)))))
+
+; Ex2.67
+(define (make-leaf symbol weight)
+  (list 'leaf symbol weight))
+(define (leaf? object)
+  (eq? (car object) 'leaf))
+(define symbol-leaf cadr)
+(define weight-leaf caddr)
+(define (make-code-tree left right)
+  (list left
+        right
+        (append (symbols left) (symbols right))
+        (+ (weight left) (weight right))))
+(define left-branch-huffman car)
+(define right-branch-huffman cadr)
+(define (symbols tree)
+  (if (leaf? tree)
+      (list (symbol-leaf tree))
+      (caddr tree)))
+(define (weight tree)
+  (if (leaf? tree)
+      (weight-leaf tree)
+      (cadddr tree)))
+(define (decode bits tree)
+  (define (decode-1 bits current-branch)
+    (if (null? bits)
+        null
+        (let ((next-branch
+               (choose-branch (car bits) current-branch)))
+          (if (leaf? next-branch)
+              (cons (symbol-leaf next-branch)
+                    (decode-1 (cdr bits) tree))     ; get back to top of tree
+              (decode-1 (cdr bits) next-branch))))) ; go down deeper
+  (define (choose-branch bit branch)
+    (cond ((= bit 0) (left-branch-huffman branch))
+          ((= bit 1) (right-branch-huffman branch))
+          (else (error "bad bit -- CHOOSE-BRANCH" bit))))
+  (decode-1 bits tree))
+(define (adjoin-set-huffman x set)
+  (cond ((null? set) (list x))
+        ((< (weight x) (weight (car set))) (cons x set))
+        (else (cons (car set)
+                    (adjoin-set-huffman x (cdr set))))))
+(define (make-leaf-set pairs)
+  (if (null? pairs)
+      null
+      (let ((pair (car pairs)))
+        (adjoin-set-huffman (make-leaf (car pair)     ; symbol
+                                       (cadr pair))   ; frequency
+                            (make-leaf-set (cdr pairs))))))
+
+; Ex2.67
+; sample Huffman symbol frequency tree
+(define sample-tree
+  (make-code-tree (make-leaf 'A 4)
+                  (make-code-tree
+                   (make-leaf 'B 2)
+                   (make-code-tree (make-leaf 'D 1)
+                                   (make-leaf 'C 1)))))
+(define sample-message '(0 1 1 0 0 1 0 1 0 1 1 1 0))
+; test with (decode sample-message sample-tree)
+; result: '(A D A B B C A)
+
+; Ex2.68
+; test with (equal? (encode '(A D A B B C A) sample-tree) sample-message)
+(define (encode message tree)
+  (if (null? message)
+      null
+      (append (encode-symbol (car message) tree)
+              (encode (cdr message) tree))))
+(define (encode-symbol symbol tree)
+  (define (in-branch? branch)
+    (not (equal? false (member symbol (symbols branch)))))
+  (cond ((leaf? tree) null)
+        ((not (in-branch? tree))
+         (error "symbol not in tree -- ENCODE-SYMBOL" symbol))
+        ((in-branch? (left-branch-huffman tree))
+         (cons 0 (encode-symbol symbol
+                                (left-branch-huffman tree))))
+        ((in-branch? (right-branch-huffman tree))
+         (cons 1 (encode-symbol symbol
+                                (right-branch-huffman tree))))))
+
+; Ex2.69
+; test with (generate-huffman-tree '((A 4) (B 2) (C 1) (D 1)))
+(define (generate-huffman-tree pairs)
+  (successive-merge (make-leaf-set pairs)))
+(define (successive-merge s)
+  (define (worker curr-set)
+    (cond ((null? (cdr curr-set)) curr-set)
+          (else (let ((left (car curr-set))
+                      (right (cadr curr-set)))
+                  (worker (cons (make-code-tree right left)
+                                (cddr curr-set)))))))
+  (car (worker s)))
+
+; Ex2.70
+(define lyrics-tree (generate-huffman-tree
+                     #ci'((A 2) (NA 16) (BOOM 1) (SHA 3)
+                             (GET 2) (YIP 9) (JOB 2) (WAH 1))))
+(define lyrics #ci'(
+                 Get a job 
+
+                     Sha na na na na na na na na
+
+                     Get a job
+
+                     Sha na na na na na na na na
+
+                     Wah yip yip yip yip yip yip yip yip yip
+
+                     Sha boom
+                     ))
+(define (print-code code)
+  (if (null? code)
+      (newline)
+      (begin (print (car code)) (print-code (cdr code)))))
+; (print-code (encode lyrics lyrics-tree)):
+; 111101110111110110000000001111011101111101100000000011111111010101010101010101101111110
+; 87 bits - 36*log_2(8)=108 bits for fixed-length code
