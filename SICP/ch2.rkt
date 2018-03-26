@@ -269,11 +269,11 @@
 ; Ex2.29
 ; a) data structure functions
 (define make-mobile list)
-(define make-branch list)
-(define left-branch car)
-(define right-branch cadr)
-(define branch-length left-branch)
-(define branch-contents right-branch)
+(define make-branch-mobile list)
+(define left-branch-mobile car)
+(define right-branch-mobile cadr)
+(define branch-length left-branch-mobile)
+(define branch-contents right-branch-mobile)
 
 ; d) use cons for representation
 (define make-mobile-new cons)
@@ -289,8 +289,8 @@
     (if (list? c)
         (total-weight c)
         c))
-  (let ((left (branch-contents (left-branch m)))
-        (right (branch-contents (right-branch m))))
+  (let ((left (branch-contents (left-branch-mobile m)))
+        (right (branch-contents (right-branch-mobile m))))
     (+ (proc-contents left)
        (proc-contents right))))
 
@@ -300,8 +300,8 @@
   (define (get ff choice)
     (define f
       (if (eq? choice 0)
-          (compose1 ff left-branch)
-          (compose1 ff right-branch)))
+          (compose1 ff left-branch-mobile)
+          (compose1 ff right-branch-mobile)))
     (f m))
   (define (get-c choice) (get branch-contents choice)) ; get contents based on choice
   (define (get-l choice) (get branch-length choice))   ; get length based on choice
@@ -323,20 +323,20 @@
 ; mobiles for test purposes
 (define test-mobile-unbalanced    ; an unbalanced mobile
   (make-mobile
-   (make-branch 3 5)
-   (make-branch 5 (make-mobile
-                   (make-branch 1 3)
-                   (make-branch 2 4)))))
+   (make-branch-mobile 3 5)
+   (make-branch-mobile 5 (make-mobile
+                   (make-branch-mobile 1 3)
+                   (make-branch-mobile 2 4)))))
 (define test-mobile-balanced      ; a balanced mobile
   (make-mobile
-   (make-branch 2 5)
-   (make-branch 1 (make-mobile
-                   (make-branch 3 (make-mobile
-                                   (make-branch 1 2)
-                                   (make-branch 1 2)))
-                   (make-branch 2 (make-mobile
-                                   (make-branch 1 4)
-                                   (make-branch 2 2)))))))
+   (make-branch-mobile 2 5)
+   (make-branch-mobile 1 (make-mobile
+                   (make-branch-mobile 3 (make-mobile
+                                   (make-branch-mobile 1 2)
+                                   (make-branch-mobile 1 2)))
+                   (make-branch-mobile 2 (make-mobile
+                                   (make-branch-mobile 1 4)
+                                   (make-branch-mobile 2 2)))))))
 
 ; Ex2.30
 ; test with (square-tree (list 1 (list 2 (list 3 4) 5) (list 6 7)))
@@ -538,7 +538,12 @@
   (queen-cols board-size))
 
 ; Ex2.44
-(require sicp-pict)
+(require (only-in sicp-pict
+                  below
+                  beside
+                  flip-vert flip-horiz
+                  segments->painter
+                  transform-painter))
 (define (flipped-pairs painter)
   (let ((painter2 (beside painter (flip-vert painter))))
     (below painter2 painter2)))
@@ -734,3 +739,183 @@
          (error "unknown expression type -- DERIV" exp))))
 
 ; Ex2.57 & Ex2.58 in separate file: infix-deriv.rkt
+
+(define (element-of-set? x set)
+  (cond ((null? set) false)
+        ((equal? x (car set)) true)
+        (else (element-of-set? x (cdr set)))))
+(define (adjoin-set x set)
+  (if (element-of-set? x set)
+      set
+      (cons x set)))
+(define (intersection-set set1 set2)
+  (cond ((or (null? set1) (null? set2)) null)
+        ((element-of-set? (car set1) set2)
+         (cons (car set1)
+               (intersection-set (cdr set1) set2)))
+        (else (intersection-set (cdr set1) set2))))
+
+; Ex2.59
+(define (union-set set1 set2)
+  (cond ((null? set1) set2)
+        ((element-of-set? (car set1) set2)
+         (union-set (cdr set1) set2))
+        (else (cons (car set1) (union-set (cdr set1) set2)))))
+
+; Ex2.60 - multisets
+(define element-of-mset? element-of-set?)
+(define adjoin-mset cons)
+; if a is present in both s1 and s2, take a and remove a from both s1 and s2
+(define (intersection-mset s1 s2)
+  (cond ((or (null? s1) (null? s2)) null)
+        ((element-of-mset? (car s1) s2)
+         (cons (car s1)
+               (intersection-mset (cdr s1) (remove (car s1) s2))))
+        (else
+         (intersection-mset (cdr s1) s2))))
+; take a and remove a from both s1 and s2
+(define (union-mset s1 s2)
+  (cond ((null? s1) s2)
+        ((null? s2) s1)
+        (else
+         (cons (car s1)
+               (union-mset (remove (car s1) s2)
+                           (cdr s1))))))
+
+; ascending set - test with the following
+; (define s1 '(1 2 4 7 8))
+; (define s2 '(2 3 4 8 9))
+(define (element-of-ascending-set? x set)
+  (cond ((null? set) false)
+        ((= x (car set)) true)
+        ((< x (car set)) false)
+        (else (element-of-ascending-set? x (cdr set)))))
+(define (intersection-ascending-set s1 s2)
+  (if (or (null? s1) (null? s2)) null
+      (let ((x1 (car s1)) (x2 (car s2)))
+        (cond ((= x1 x2)
+               (cons x1
+                     (intersection-ascending-set (cdr s1)
+                                                 (cdr s2))))
+              ((< x1 x2)
+               (intersection-ascending-set (cdr s1) s2))
+              ((> x1 x2)
+               (intersection-ascending-set s1 (cdr s2)))))))
+; Ex2.61
+(define (adjoin-ascending-set x s)
+  (cond ((null? s) (list x))
+        ((< x (car s)) (cons x s))
+        (else
+         (cons (car s) (adjoin-ascending-set x (cdr s))))))
+; Ex2.62
+(define (union-ascending-set s1 s2)
+  (cond ((null? s1) s2)
+        ((null? s2) s1)
+        (else
+         (let ((x1 (car s1)) (x2 (car s2)))
+           (cond ((= x1 x2)
+                  (cons x1 (union-ascending-set (cdr s1) (cdr s2))))
+                 ((< x1 x2)
+                  (cons x1 (union-ascending-set (cdr s1) s2)))
+                 (else
+                  (cons x2 (union-ascending-set s1 (cdr s2)))))))))
+
+; binary-tree-represented sets
+(define (entry tree) (car tree))
+(define (left-branch tree) (cadr tree))
+(define (right-branch tree) (caddr tree))
+(define (make-tree entry l r)
+  (list entry l r))
+(define (element-of-tree-set? x set)
+  (cond ((null? set) false)
+        ((= x (entry set)) true)
+        ((< x (entry set))
+         (element-of-tree-set? x (left-branch set)))
+        ((> x (entry set))
+         (element-of-tree-set? x (right-branch set)))))
+(define (adjoin-tree-set x set)
+  (cond ((null? set) (make-tree x null null))
+        ((= x (entry set)) set)
+        ((< x (entry set))
+         (make-tree (entry set)
+                    (adjoin-tree-set x (left-branch set))
+                    (right-branch set)))
+        ((> x (entry set))
+         (make-tree (entry set)
+                    (left-branch set)
+                    (adjoin-tree-set x (right-branch set))))))
+
+; Ex2.63
+; They produce the same result
+; version 1: T(n) = 2*T(n / 2) + O(n / 2) => O(n * log n)
+; version 2: T(n) = 2*T(n / 2) + O(1)     => O(n)
+(define (tree->list-1 tree)
+  (if (null? tree)
+      null
+      (append (tree->list-1 (left-branch tree))
+              (cons (entry tree)
+                    (tree->list-1 (right-branch tree))))))
+(define (tree->list-2 tree)
+  (define (copy-to-list tree result)
+    (if (null? tree)
+        result
+        (copy-to-list (left-branch tree)
+                      (cons (entry tree)
+                            (copy-to-list (right-branch tree)
+                                          result)))))
+  (copy-to-list tree null))
+
+; Ex2.64
+; for elements that's an ordered list
+(define (list->tree elements)
+  (car (partial-tree elements (length elements))))
+(define (partial-tree elts n)
+  (if (= n 0)
+      (cons null elts)
+      (let ((left-size (quotient (- n 1) 2)))
+        (let ((left-result (partial-tree elts left-size)))
+          (let ((left-tree (car left-result))
+                (non-left-elts (cdr left-result))
+                (right-size (- n (+ left-size 1))))
+            (let ((this-entry (car non-left-elts))
+                  (right-result (partial-tree (cdr non-left-elts)
+                                              right-size)))
+              (let ((right-tree (car right-result))
+                    (remaining-elts (cdr right-result)))
+                (cons (make-tree this-entry left-tree right-tree)
+                      remaining-elts))))))))
+; Provided that the input sequence is sorted, the algorithm
+; takes the first n elements requested to be constructed into
+; a balanced binary tree, selects the two halves, constructs
+; balanced trees recursively, and putting them together to form
+; the requested balanced tree.
+; T(n) = 2*T(n/2) + O(1) => O(n)
+
+; Ex2.65
+; test with:
+; (define a (list->tree '(1 2 5 6 7 9)))
+; (define b (list->tree '(2 3 4 8 9)))
+; (union-tree-set a b)
+; (tree->list (union-tree-set a b))
+; (tree->list (intersection-tree-set a b))
+(define tree->list tree->list-2)
+(define (union-tree-set s1 s2)
+  (let ((l1 (tree->list s1))
+        (l2 (tree->list s2)))
+    (list->tree (union-ascending-set l1 l2))))
+(define (intersection-tree-set s1 s2)
+  (let ((l1 (tree->list s1))
+        (l2 (tree->list s2)))
+    (list->tree (intersection-ascending-set l1 l2))))
+
+; Ex2.66
+(define make-record cons)
+(define key car)
+(define value cdr)
+(define (lookup k db)
+  (cond ((null? db) false)
+        ((= k (key (entry db))) (value (entry db)))
+        ((< k (key (entry db)))
+         (lookup k (left-branch db)))
+        ((> k (key (entry db)))
+         (lookup k (right-branch db)))))
