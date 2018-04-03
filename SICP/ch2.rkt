@@ -1039,3 +1039,148 @@
 ; (print-code (encode lyrics lyrics-tree)):
 ; 111101110111110110000000001111011101111101100000000011111111010101010101010101101111110
 ; 87 bits - 36*log_2(8)=108 bits for fixed-length code
+
+; tagged data
+(define attach-tag cons)
+(define (type-tag datum)
+  (if (pair? datum)
+      (car datum)
+      (error "Bad tagged datum -- TYPE-TAG" datum)))
+(define (contents datum)
+  (if (pair? datum)
+      (cdr datum)
+      (error "Bad tagged datum -- CONTENTS" datum)))
+
+; get & put
+(define *table* (make-hash))
+(define (put op tag-type f)
+  (hash-set! *table* (list op tag-type) f))
+(define (get op tag-type)
+  (hash-ref *table* (list op tag-type) #f))
+(define (apply-generic op . args)
+  (let ((type-tags (map type-tag args)))
+    (let ((proc (get op type-tags)))
+      (if proc
+          (apply proc (map contents args))
+          (error "No method for these types -- APPLY-GENERIC"
+                 (list op type-tags))))))
+; Ex2.73
+(define (deriv-new exp var)
+  (cond ((number? exp) 0)
+        ((variable? exp) (if (same-variable? exp var) 1 0))
+        (else ((get 'deriv (operator exp)) (operands exp) var))))
+(define operator car)
+(define operands cdr)
+; a: unless the expression is a variable or number, dispatch the expression
+;    according to the tag (type) of the expression;
+;    numbers and variables are not lists, thus can't have types
+(define (install-sum-package)
+  ;; internal functions
+  (define addend car)
+  (define (augend s)
+    (if (null? (cddr s)) (cadr s)
+        (cons '+ (cdr s))))
+  (define (make-sum a1 a2)
+    (cond ((=number? a1 0) a2)
+          ((=number? a2 0) a1)
+          ((and (number? a1) (number? a2)) (+ a1 a2))
+          (else (list '+ a1 a2))))
+  (define (deriv-sum exp var)
+    (make-sum (deriv-new (addend exp) var)
+              (deriv-new (augend exp) var)))
+  ;; exported functions
+  (put 'make '+ make-sum)
+  (put 'deriv '+ deriv-sum)
+  'done)
+(install-sum-package)
+(define (install-product-package)
+  ;; internal functions
+  (define multiplier car)
+  (define (multiplicand p)
+    (if (null? (cddr p)) (cadr p)
+        (cons '* (cdr p))))
+  (define (make-product m1 m2)
+    (cond ((or (=number? m1 0) (=number? m2 0)) 0)
+          ((=number? m1 1) m2)
+          ((=number? m2 1) m1)
+          ((and (number? m1) (number? m2)) (* m1 m2))
+          (else (list '* m1 m2))))
+  (define (deriv-product exp var)
+    ((get 'make '+)
+     (make-product (multiplier exp)
+                   (deriv-new (multiplicand exp) var))
+     (make-product (deriv-new (multiplier exp) var)
+                   (multiplicand exp))))
+  ;; exported functions
+  (put 'make '* make-product)
+  (put 'deriv '* deriv-product)
+  'done)
+(install-product-package)
+(define (install-exponent-package)
+  ;; internal functions
+  (define (base s) (car s))
+  (define (exponent s) (cadr s))
+  (define (make-exponentation b e)
+    (cond ((=number? e 0) 1)
+          ((=number? e 1) b)
+          ((and (number? b) (number? e)) (expt b e))
+          (else (list '** b e))))
+  (define (deriv-exponentation exp var)
+    (let ((make-product (get 'make '*)))
+      (make-product
+       (make-product
+        (exponent exp)
+        (make-exponentation (base exp) (- (exponent exp) 1)))
+       (deriv-new (base exp) var))))
+  ;; exported functions
+  (put 'make '** make-exponentation)
+  (put 'deriv '** deriv-exponentation)
+  'done)
+(install-exponent-package)
+; d: with inverted position of operator and operation name, relevant put
+;    clauses need modification to suit the new order
+
+; Ex2.74
+(define (install-record-package)
+  ;; internal functions
+  ;; exported functions
+  'done)
+; a: the personnel file should be a pair consisting of the
+;    division identifier and the data
+(define (get-record employee file)
+  (let ((file-type (type-tag file)))
+    (let ((getter (get 'query file-type)))
+      (getter employee (contents file)))))
+; b: the record should be a pair consisting of the record type
+;    identifier and the data, with a salary getter available in the function table
+(define (get-salary employee)
+  (let ((record-type (type-tag employee)))
+    (let ((getter (get 'salary record-type)))
+      (getter (contents employee)))))
+; c
+(define (find-employee-record name file-list)
+  (if (null? file-list)
+      false
+      (let ((find-result (get-record name (car file-list))))
+        (if find-result
+            find-result
+            (find-employee-record name (cdr file-list))))))
+; d: a new package for the new company, implementing 'query 'salary
+
+; Ex2.75
+(define (make-from-mag-ang mag ang)
+  (define (dispatch op)
+    (cond ((eq? op 'magnitude) mag)
+          ((eq? op 'angle) ang)
+          ((eq? op 'real-part)
+           (* mag (cos ang)))
+          ((eq? op 'imag-part)
+           (* mag (sin ang)))
+          (else
+           (error "Unknown op -- MAKE-FROM-MAG-ANG" op))))
+  dispatch)
+
+; Ex2.76
+; explicit dispatch is good for adding new operations
+; data-directed style is good for both situations
+; message-passing style is best for new types
