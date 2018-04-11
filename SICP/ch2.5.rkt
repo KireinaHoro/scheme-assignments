@@ -22,14 +22,68 @@
 (define (get op type-tags)
   (hash-ref *table* (list op type-tags) #f))
 
+; global coercion table
+(define *coercion-table* (make-hash))
+(define (put-coercion src dst f)
+  (hash-set! *coercion-table* (cons src dst) f))
+(define (get-coercion src dst)
+  (hash-ref *coercion-table* (cons src dst) #f))
+
 ; apply operation to tagged data
 (define (apply-generic op . args)
   (let* ([type-tags (map type-tag args)]  ; parameter type list
          [proc (get op type-tags)])       ; real processor
     (if proc
         (apply proc (map contents args))
-        (error "No method for these types -- APPLY-GENERIC"
-               (list op type-tags)))))
+        (if (= (length args) 2)
+            (let* ([type1 (car type-tags)]
+                   [type2 (cadr type-tags)]
+                   [a1 (car args)]
+                   [a2 (cadr args)]
+                   [t1->t2 (get-coercion type1 type2)]
+                   [t2->t1 (get-coercion type2 type1)])
+              (cond [(eq? type1 type2)    ; there's no method for these two types, as we've tried before
+                     (error "No method for these types -- APPLY-GENERIC"
+                            (list op type-tags))]
+                    [t1->t2
+                     (apply-generic op (t1->t2 a1) a2)]
+                    [t2->t1
+                     (apply-generic op a1 (t2->t1 a2))]
+                    [else              
+                     (error "No method for these types -- APPLY-GENERIC"
+                            (list op type-tags))]))
+            (error "No method for these types -- APPLY-GENERIC"
+                   (list op type-tags))))))
+
+; Ex2.82
+; limitation: exp: '(complex scheme-number)
+; will try to convert to '(complex complex) and '(scheme-number scheme-number)
+(define (apply-generic-alternative op . args)
+  (define (get-conversion a b)
+    (if (eq? a b) identity    ; don't convert if we're of the same type
+        (get-coercion a b)))
+  (let* ([type-tags (map type-tag args)]
+         [proc (get op type-tags)])
+    (if proc
+        (apply proc (map contents args))
+        (let loop ([types-available type-tags])
+          (let* ([current-type (car types-available)]
+                 [destination-types (map (const current-type) type-tags)]
+                 [coercion-list
+                  (map get-conversion type-tags destination-types)]
+                 [coercion-available
+                  (eq? false (memq false coercion-list))]
+                 [proc (get op destination-types)])
+            (cond [(and proc coercion-available)
+                   (apply proc
+                          (map (compose contents apply)
+                               coercion-list
+                               (map list args)))]
+                  [(not (null? (cdr types-available)))
+                   (loop (cdr types-available))]
+                  [else
+                   (error "No method for these types -- APPLY-GENERIC-ALTERNATIVE"
+                          (list op type-tags))]))))))
 
 ; handle normal scheme numbers
 (define (install-scheme-number-package)
@@ -164,6 +218,8 @@
                        (- (angle z1) (angle z2))))
   (define (equ? x y) (and (= (real-part x) (real-part y))
                           (= (imag-part x) (imag-part y))))
+  (define (scheme-number->complex n)
+    (make-complex-from-real-imag (contents n) 0))
   ;; interface to rest of the system
   (define (tag z) (attach-tag 'complex z))
   (put 'real-part '(complex) real-part)
@@ -185,6 +241,7 @@
   (put 'equ? '(complex complex) equ?)
   (put '=zero? '(complex)
        (lambda (x) (equ? x (make-from-real-imag 0 0))))
+  (put-coercion 'scheme-number 'complex scheme-number->complex)
   'done)
 (install-complex-package)
 (define (make-complex-from-real-imag x y)
@@ -192,5 +249,5 @@
 (define (make-complex-from-mag-ang r a)
   ((get 'make-from-mag-ang 'complex) r a))
 
-;(define a (make-complex-from-real-imag 1 3))
-;(define b (make-complex-from-mag-ang 2 (/ pi 4)))
+(define a (make-complex-from-real-imag 1 3))
+(define b (make-complex-from-mag-ang 2 (/ pi 4)))
