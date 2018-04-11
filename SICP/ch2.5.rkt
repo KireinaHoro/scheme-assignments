@@ -35,7 +35,7 @@
 
 ; global type tower
 (define *type-tower*
-  (list 'scheme-number 'rational 'complex))
+  (list 'scheme-number 'rational 'real 'complex))
 (define (is-higher-than? a b)
   (if (eq? a b) false
       (not (eq? false (memq a (memq b *type-tower*))))))
@@ -47,7 +47,7 @@
         [else
          (+ 1 (distance-in-tower (cadr (memq a *type-tower*))
                                  b))]))
-      
+
 
 ; apply operation to tagged data
 (define (apply-generic op . args)
@@ -146,7 +146,7 @@
        (lambda (x) (tag x)))
   (put 'equ? '(scheme-number scheme-number) =)
   (put '=zero? '(scheme-number) (lambda (x) (= x 0)))
-  (put 'raise '(scheme-number)
+  (put 'raise '(scheme-number) ; to rational
        (lambda (x) ((get 'make 'rational) x 1)))
   'done)
 (install-scheme-number-package)
@@ -192,14 +192,47 @@
   (put 'equ? '(rational rational) equ?)
   (put '=zero? '(rational)
        (lambda (x) (equ? x (make-rat 0 1))))
-  (put 'raise '(rational)
+  (put 'raise '(rational)   ; to real
        (lambda (x)
-         ((get 'make-from-real-imag 'complex)
-          (/ (numer (contents x)) (denom (contents x))) 0)))
+	 ((get 'make 'real) (/ (numer x)
+			       (denom x)))))
+  (put 'project '(rational) ; to scheme-number
+       (lambda (x)
+	 ((get 'make 'scheme-number)
+	  (quotient (numer (contents x)) (denom (contents x))))))
   'done)
 (install-rational-package)
 (define (make-rational n d)
   ((get 'make 'rational) n d))
+
+(define (install-real-package)
+  (define (tag x)
+    (attach-tag 'real x))
+  (put 'add '(real real)
+       (lambda (x y) (tag (+ x y))))
+  (put 'sub '(real real)
+       (lambda (x y) (tag (- x y))))
+  (put 'mul '(real real)
+       (lambda (x y) (tag (* x y))))
+  (put 'div '(real real)
+       (lambda (x y) (tag (/ x y))))
+  (put 'make 'real
+       (lambda (x) (tag x)))
+  (put 'equ? '(real real) =)
+  (put '=zero? '(real) (lambda (x) (= x 0)))
+  (put 'raise '(real)   ; to complex
+       (lambda (x)
+         ((get 'make-from-real-imag 'complex)
+	  (contents x) 0)))
+  (put 'project '(real) ; to rational
+       (lambda (x)
+	 ((get 'make 'rational)
+	  (* (contents x) 100000000000)
+	  100000000000)))
+  'done)
+(install-real-package)
+(define (make-real n)
+  ((get 'make 'real) n))
 
 ; handle complex numbers
 ; need rectangular and polar packages
@@ -293,6 +326,9 @@
   (put '=zero? '(complex)
        (lambda (x) (equ? x (make-from-real-imag 0 0))))
   (put-coercion 'scheme-number 'complex scheme-number->complex)
+  (put 'project '(complex) ; to real
+       (lambda (x)
+	 ((get 'make 'real) (real-part x))))
   'done)
 (install-complex-package)
 (define (make-complex-from-real-imag x y)
@@ -300,5 +336,16 @@
 (define (make-complex-from-mag-ang r a)
   ((get 'make-from-mag-ang 'complex) r a))
 
+(define (drop x)
+  (let ([project (get 'project (list (type-tag x)))])
+    (if project
+	(let* ([project-result (project x)]
+	       [raise-result (apply-generic 'raise project-result)])
+	  (if (equal? raise-result x)
+	      (drop project-result)
+	      x))
+	x)))
+
 (define a (make-complex-from-real-imag 1 3))
-(define b (make-complex-from-mag-ang 2 (/ pi 4)))
+(define b (make-complex-from-real-imag 4 0))
+(define c (make-complex-from-real-imag 4.2 0))
