@@ -1,5 +1,9 @@
 #lang racket
 
+(define (compose1-n f n)
+  (if (= n 0)
+      identity
+      (compose1 f (compose1-n f (- n 1)))))
 ; tagged data type
 (define (attach-tag tag content)
   (cond [(eq? tag 'scheme-number) content]
@@ -28,6 +32,22 @@
   (hash-set! *coercion-table* (cons src dst) f))
 (define (get-coercion src dst)
   (hash-ref *coercion-table* (cons src dst) #f))
+
+; global type tower
+(define *type-tower*
+  (list 'scheme-number 'rational 'complex))
+(define (is-higher-than? a b)
+  (if (eq? a b) false
+      (not (eq? false (memq a (memq b *type-tower*))))))
+(define (distance-in-tower a b)
+  (cond [(is-higher-than? a b)
+         (error "Trying to cast from higher type to lower type -- DISTANCE-IN-TOWER"
+                (list a b))]
+        [(eq? a b) 0]
+        [else
+         (+ 1 (distance-in-tower (cadr (memq a *type-tower*))
+                                 b))]))
+      
 
 ; apply operation to tagged data
 (define (apply-generic op . args)
@@ -58,7 +78,7 @@
 ; Ex2.82
 ; limitation: exp: '(complex scheme-number)
 ; will try to convert to '(complex complex) and '(scheme-number scheme-number)
-(define (apply-generic-alternative op . args)
+(define (apply-generic-type-list op . args)
   (define (get-conversion a b)
     (if (eq? a b) identity    ; don't convert if we're of the same type
         (get-coercion a b)))
@@ -69,21 +89,46 @@
         (let loop ([types-available type-tags])
           (let* ([current-type (car types-available)]
                  [destination-types (map (const current-type) type-tags)]
-                 [coercion-list
+                 [coercion-function-list
                   (map get-conversion type-tags destination-types)]
                  [coercion-available
-                  (eq? false (memq false coercion-list))]
+                  (eq? false (memq false coercion-function-list))]
                  [proc (get op destination-types)])
             (cond [(and proc coercion-available)
                    (apply proc
                           (map (compose contents apply)
-                               coercion-list
+                               coercion-function-list
                                (map list args)))]
                   [(not (null? (cdr types-available)))
                    (loop (cdr types-available))]
                   [else
-                   (error "No method for these types -- APPLY-GENERIC-ALTERNATIVE"
+                   (error "No method for these types -- APPLY-GENERIC-TYPE-LIST"
                           (list op type-tags))]))))))
+
+; Ex2.84
+; raise all arguments to the type of the most derived type
+(define (apply-generic-raise op . args)
+  (define (raise x) ((get 'raise (list (type-tag x)))
+                     x))
+  (define type-tags (map type-tag args))
+  (define highest-type (car (sort
+                             type-tags
+                             is-higher-than?)))
+  (let ([proc (get op type-tags)])
+    (if proc
+        (apply proc (map contents args))
+        (let ([proc (get op (map (const highest-type) type-tags))])
+          (if proc
+              (apply proc
+                     (map (lambda (x)
+                            (contents
+                             ((compose1-n raise
+                                          (distance-in-tower (type-tag x)
+                                                             highest-type))
+                              x)))
+                          args))
+              (error "No method for these types -- APPLY-GENERIC-RAISE"
+                     (list op type-tags)))))))
 
 ; handle normal scheme numbers
 (define (install-scheme-number-package)
@@ -101,6 +146,8 @@
        (lambda (x) (tag x)))
   (put 'equ? '(scheme-number scheme-number) =)
   (put '=zero? '(scheme-number) (lambda (x) (= x 0)))
+  (put 'raise '(scheme-number)
+       (lambda (x) ((get 'make 'rational) x 1)))
   'done)
 (install-scheme-number-package)
 (define (make-scheme-number n)
@@ -145,6 +192,10 @@
   (put 'equ? '(rational rational) equ?)
   (put '=zero? '(rational)
        (lambda (x) (equ? x (make-rat 0 1))))
+  (put 'raise '(rational)
+       (lambda (x)
+         ((get 'make-from-real-imag 'complex)
+          (/ (numer (contents x)) (denom (contents x))) 0)))
   'done)
 (install-rational-package)
 (define (make-rational n d)
