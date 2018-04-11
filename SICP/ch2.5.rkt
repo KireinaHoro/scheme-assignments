@@ -346,6 +346,7 @@
 	      x))
 	x)))
 
+; test numbers for drop procedure
 (define a (make-complex-from-real-imag 1 3))
 (define b (make-complex-from-real-imag 4 0))
 (define c (make-complex-from-real-imag 4.2 0))
