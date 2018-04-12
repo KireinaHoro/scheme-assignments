@@ -108,7 +108,7 @@
 ; raise all arguments to the type of the most derived type
 (define (apply-generic-raise op . args)
   (define (raise x) ((get 'raise (list (type-tag x)))
-                     x))
+                     (contents x)))
   (define type-tags (map type-tag args))
   (define highest-type (car (sort
                              type-tags
@@ -237,12 +237,12 @@
        (lambda (x) (equ? x (make-rat 0 1))))
   (put 'raise '(rational)   ; to real
        (lambda (x)
-	 ((get 'make 'real) (/ (numer (contents x))
-			       (denom (contents x))))))
+	 ((get 'make 'real) (/ (numer x)
+			       (denom x)))))
   (put 'project '(rational) ; to scheme-number
        (lambda (x)
 	 ((get 'make 'scheme-number)
-	  (quotient (numer (contents x)) (denom (contents x))))))
+	  (quotient (numer x) (denom x)))))
   'done)
 (install-rational-package)
 (define (make-rational n d)
@@ -281,11 +281,11 @@
   (put 'raise '(real)   ; to complex
        (lambda (x)
          ((get 'make-from-real-imag 'complex)
-	  (contents x) 0)))
+	  x 0)))
   (put 'project '(real) ; to rational
        (lambda (x)
 	 ((get 'make 'rational)
-	  (* (contents x) 100000000000)
+	  (* x 100000000000)
 	  100000000000)))
   'done)
 (install-real-package)
@@ -416,7 +416,7 @@
 (define (drop x)
   (let ([project (get 'project (list (type-tag x)))])
     (if project
-	(let* ([project-result (project x)]
+	(let* ([project-result (project (contents x))]
 	       [raise-result (apply-generic-raise 'raise project-result)])
 	  (if (equal? raise-result x)
 	      (drop project-result)
