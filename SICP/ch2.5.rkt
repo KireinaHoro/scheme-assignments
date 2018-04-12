@@ -48,7 +48,6 @@
          (+ 1 (distance-in-tower (cadr (memq a *type-tower*))
                                  b))]))
 
-
 ; apply operation to tagged data
 (define (apply-generic op . args)
   (let* ([type-tags (map type-tag args)]  ; parameter type list
@@ -132,8 +131,17 @@
 
 ; handle normal scheme numbers
 (define (install-scheme-number-package)
+  ;; internal functions
   (define (tag x)
     (attach-tag 'scheme-number x))
+  (define (make-result x)
+    (define (result-in-real x)
+      (make-real x))
+    (define (result-in-scheme-number x)
+      (make-scheme-number x))
+    (if (integer? x)
+	(result-in-scheme-number x)
+	(result-in-real x)))
   (put 'add '(scheme-number scheme-number)
        (lambda (x y) (tag (+ x y))))
   (put 'sub '(scheme-number scheme-number)
@@ -142,6 +150,21 @@
        (lambda (x y) (tag (* x y))))
   (put 'div '(scheme-number scheme-number)
        (lambda (x y) (tag (/ x y))))
+  (put 'sqrt '(scheme-number)
+       (lambda (x)
+	 (make-result (sqrt x))))
+  (put 'sqr '(scheme-number)
+       (lambda (x)
+	 (make-result (sqr x))))
+  (put 'sin '(scheme-number)
+       (lambda (x)
+	 (make-result (sin x))))
+  (put 'cos '(scheme-number)
+       (lambda (x)
+	 (make-result (cos x))))
+  (put 'atan '(scheme-number)
+       (lambda (x)
+	 (make-result (atan x))))
   (put 'make 'scheme-number
        (lambda (x) (tag x)))
   (put 'equ? '(scheme-number scheme-number) =)
@@ -187,6 +210,26 @@
        (lambda (x y) (tag (mul-rat x y))))
   (put 'div '(rational rational)
        (lambda (x y) (tag (div-rat x y))))
+  (put 'sqrt '(rational)
+       (lambda (x)
+	 (let ([numer-sqrt (sqrt (numer x))]
+	       [denom-sqrt (sqrt (denom x))])
+	   (if (and (integer? numer-sqrt)
+		    (integer? denom-sqrt))
+	       (make-rational numer-sqrt denom-sqrt)
+	       (make-real (/ numer-sqrt denom-sqrt))))))
+  (put 'sqr '(rational)
+       (lambda (x)
+	 (make-rational (sqr (numer x)) (denom x))))
+  (put 'sin '(rational)
+       (lambda (x)
+	 (make-real (sin (/ (numer x) (denom x))))))
+  (put 'cos '(rational)
+       (lambda (x)
+	 (make-real (cos (/ (numer x) (denom x))))))
+  (put 'atan '(rational)
+       (lambda (x)
+	 (make-real (atan (/ (numer x) (denom x))))))
   (put 'make 'rational
        (lambda (n d) (tag (make-rat n d))))
   (put 'equ? '(rational rational) equ?)
@@ -194,8 +237,8 @@
        (lambda (x) (equ? x (make-rat 0 1))))
   (put 'raise '(rational)   ; to real
        (lambda (x)
-	 ((get 'make 'real) (/ (numer x)
-			       (denom x)))))
+	 ((get 'make 'real) (/ (numer (contents x))
+			       (denom (contents x))))))
   (put 'project '(rational) ; to scheme-number
        (lambda (x)
 	 ((get 'make 'scheme-number)
@@ -216,6 +259,21 @@
        (lambda (x y) (tag (* x y))))
   (put 'div '(real real)
        (lambda (x y) (tag (/ x y))))
+  (put 'sqrt '(real)
+       (lambda (x)
+	 (make-real (sqrt x))))
+  (put 'sqr '(real)
+       (lambda (x)
+	 (make-real (sqr x))))
+  (put 'sin '(real)
+       (lambda (x)
+	 (make-real (sin x))))
+  (put 'cos '(real)
+       (lambda (x)
+	 (make-real (cos x))))
+  (put 'atan '(real)
+       (lambda (x)
+	 (make-real (atan x))))
   (put 'make 'real
        (lambda (x) (tag x)))
   (put 'equ? '(real real) =)
@@ -234,6 +292,13 @@
 (define (make-real n)
   ((get 'make 'real) n))
 
+;; algebraic functions for generic numbers
+(define (sqrt-generic x) (apply-generic-raise 'sqrt x))
+(define (sqr-generic x) (apply-generic-raise 'sqr x))
+(define (sin-generic x) (apply-generic-raise 'sin x))
+(define (cos-generic x) (apply-generic-raise 'cos x))
+(define (atan-generic x) (apply-generic-raise 'atan x))
+
 ; handle complex numbers
 ; need rectangular and polar packages
 (define (install-complex-package)
@@ -243,11 +308,13 @@
     (define real-part car)
     (define imag-part cdr)
     (define (magnitude x)
-      (sqrt (+ (sqr (real-part x))
-               (sqr (imag-part x)))))
+      (sqrt-generic (apply-generic-raise 'add
+				   (sqr-generic (real-part x))
+				   (sqr-generic (imag-part x)))))
     (define (angle x)
-      (atan (/ (imag-part x)
-               (real-part x))))
+      (atan-generic (apply-generic-raise 'div
+				   (imag-part x)
+				   (real-part x))))
     ;; exported functions
     (define (tag x) (attach-tag 'rectangular x))
     (put 'make-from-real-imag 'rectangular
@@ -262,11 +329,11 @@
     (define magnitude car)
     (define angle cdr)
     (define (real-part x)
-      (* (magnitude x)
-         (cos (angle x))))
+      (apply-generic-raise 'mul (magnitude x)
+		     (cos-generic (angle x))))
     (define (imag-part x)
-      (* (magnitude x)
-         (sin (angle x))))
+      (apply-generic-raise 'mul (magnitude x)
+		     (sin-generic (angle x))))
     ;; exported functions
     (define (tag x) (attach-tag 'polar x))
     (put 'make-from-mag-ang 'polar
@@ -283,25 +350,35 @@
     ((get 'make-from-real-imag 'rectangular) x y))
   (define (make-from-mag-ang r a)
     ((get 'make-from-mag-ang 'polar) r a))
-  (define (real-part x) (apply-generic 'real-part x))
-  (define (imag-part x) (apply-generic 'imag-part x))
-  (define (magnitude x) (apply-generic 'magnitude x))
-  (define (angle x) (apply-generic 'angle x))
+  (define (real-part x) (apply-generic-raise 'real-part x))
+  (define (imag-part x) (apply-generic-raise 'imag-part x))
+  (define (magnitude x) (apply-generic-raise 'magnitude x))
+  (define (angle x) (apply-generic-raise 'angle x))
   ;; internal procedures
   (define (add-complex z1 z2)
-    (make-from-real-imag (+ (real-part z1) (real-part z2))
-                         (+ (imag-part z1) (imag-part z2))))
+    (make-from-real-imag (apply-generic-raise 'add
+					(real-part z1) (real-part z2))
+                         (apply-generic-raise 'add
+					(imag-part z1) (imag-part z2))))
   (define (sub-complex z1 z2)
-    (make-from-real-imag (- (real-part z1) (real-part z2))
-                         (- (imag-part z1) (imag-part z2))))
+    (make-from-real-imag (apply-generic-raise 'sub
+					(real-part z1) (real-part z2))
+                         (apply-generic-raise 'sub
+					(imag-part z1) (imag-part z2))))
   (define (mul-complex z1 z2)
-    (make-from-mag-ang (* (magnitude z1) (magnitude z2))
-                       (+ (angle z1) (angle z2))))
+    (make-from-mag-ang (apply-generic-raise 'mul
+				      (magnitude z1) (magnitude z2))
+                       (apply-generic-raise 'add
+				      (angle z1) (angle z2))))
   (define (div-complex z1 z2)
-    (make-from-mag-ang (/ (magnitude z1) (magnitude z2))
-                       (- (angle z1) (angle z2))))
-  (define (equ? x y) (and (= (real-part x) (real-part y))
-                          (= (imag-part x) (imag-part y))))
+    (make-from-mag-ang (apply-generic-raise 'div
+				      (magnitude z1) (magnitude z2))
+                       (apply-generic-raise 'sub
+				      (angle z1) (angle z2))))
+  (define (equ? x y) (and (apply-generic-raise 'equ?
+					 (real-part x) (real-part y))
+                          (apply-generic-raise 'equ?
+					 (imag-part x) (imag-part y))))
   (define (scheme-number->complex n)
     (make-complex-from-real-imag (contents n) 0))
   ;; interface to rest of the system
@@ -340,7 +417,7 @@
   (let ([project (get 'project (list (type-tag x)))])
     (if project
 	(let* ([project-result (project x)]
-	       [raise-result (apply-generic 'raise project-result)])
+	       [raise-result (apply-generic-raise 'raise project-result)])
 	  (if (equal? raise-result x)
 	      (drop project-result)
 	      x))
@@ -350,3 +427,10 @@
 (define a (make-complex-from-real-imag 1 3))
 (define b (make-complex-from-real-imag 4 0))
 (define c (make-complex-from-real-imag 4.2 0))
+(define d (make-complex-from-real-imag
+	   (make-rational 1 4)
+	   (make-rational 2 5)))
+(define e (make-complex-from-mag-ang
+	   (make-real 7.23)
+	   (make-scheme-number 3)))
+
