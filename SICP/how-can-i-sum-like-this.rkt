@@ -18,7 +18,7 @@
     (if (null? ls)
         (exec k n) ;call k for n times. same effect as (k). just to prevent cheating
         (iter (k (car ls)) (cdr ls))))
-  (iter (mysum (car s)) (cdr s)))A
+  (iter (mysum (car s)) (cdr s)))
 
 (define k ((((mysum 1) 2) 3) 4))
 (define k2 ((mysum 10) 20))
