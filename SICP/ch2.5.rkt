@@ -150,6 +150,8 @@
        (lambda (x y) (tag (* x y))))
   (put 'div '(scheme-number scheme-number)
        (lambda (x y) (tag (/ x y))))
+  (put 'negate '(scheme-number)
+       (lambda (x) (tag (- x))))
   (put 'sqrt '(scheme-number)
        (lambda (x)
 	 (make-result (sqrt x))))
@@ -210,6 +212,9 @@
        (lambda (x y) (tag (mul-rat x y))))
   (put 'div '(rational rational)
        (lambda (x y) (tag (div-rat x y))))
+  (put 'negate '(rational)
+       (lambda (x) (tag (sub-rat (make-rat 0 1)
+				 x))))
   (put 'sqrt '(rational)
        (lambda (x)
 	 (let ([numer-sqrt (sqrt (numer x))]
@@ -259,6 +264,8 @@
        (lambda (x y) (tag (* x y))))
   (put 'div '(real real)
        (lambda (x y) (tag (/ x y))))
+  (put 'negate '(real)
+       (lambda (x) (tag (- x))))
   (put 'sqrt '(real)
        (lambda (x)
 	 (make-real (sqrt x))))
@@ -395,6 +402,9 @@
        (lambda (z1 z2) (tag (mul-complex z1 z2))))
   (put 'div '(complex complex)
        (lambda (z1 z2) (tag (div-complex z1 z2))))
+  (put 'negate '(complex)
+       (lambda (x) (tag (sub-complex (make-from-real-imag 0 0)
+				     x))))
   (put 'make-from-real-imag 'complex
        (lambda (x y) (tag (make-from-real-imag x y))))
   (put 'make-from-mag-ang 'complex
@@ -434,3 +444,122 @@
 	   (make-real 7.23)
 	   (make-scheme-number 3)))
 
+(define (add x y) (apply-generic-raise 'add x y))
+(define (negate x) (apply-generic-raise 'negate x))
+(define (sub x y) (add x (negate y)))
+(define (mul x y) (apply-generic-raise 'mul x y))
+(define (=zero? x) (apply-generic-raise '=zero? x))
+
+(define (install-polynomial-package)
+  ;; internal procedures
+  ;; representation of poly
+  (define (make-poly variable term-list)
+    (cons variable term-list))
+  (define variable car)
+  (define term-list cdr)
+  (define variable? symbol?)
+  (define (same-variable? v1 v2)
+    (and (variable? v1) (variable? v2) (eq? v1 v2)))
+  ;; representation of terms and term lists
+
+  (define (add-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+	(make-poly (variable p1)
+		   (add-terms (term-list p1)
+			      (term-list p2)))
+	(error "Polys not in same var -- ADD-POLY"
+	       (list p1 p2))))
+  (define (negate-poly p)
+    (make-poly (variable p)
+	       (map (lambda (t)
+		      (make-term (order t)
+				 (negate (coeff t))))
+		    (term-list p))))
+  (define (mul-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+	(make-poly (variable p1)
+		   (mul-terms (term-list p1)
+			      (term-list p2)))
+	(error "Polys not in same var -- MUL-POLY"
+	       (list p1 p2))))
+  (define (add-terms l1 l2)
+    (cond [(empty-termlist? l1) l2]
+	  [(empty-termlist? l2) l1]
+	  [else
+	   (let ([t1 (first-term l1)]
+		 [t2 (first-term l2)])
+	     (cond [(> (order t1) (order t2))
+		    (adjoin-term
+		     t1 (add-terms (rest-terms l1) l2))]
+		   [(< (order t1) (order t2))
+		    (adjoin-term
+		     t2 (add-terms (rest-terms l2) l1))]
+		   [else
+		    (adjoin-term
+		     (make-term (order t1)
+				(add (coeff t1) (coeff t2)))
+		     (add-terms (rest-terms l1)
+				(rest-terms l2)))]))]))
+  (define (mul-terms l1 l2)
+    (if (empty-termlist? l1)
+	(the-empty-termlist)
+	(add-terms (mul-term-by-all-terms (first-term l1) l2)
+		   (mul-terms (rest-terms l1) l2))))
+  (define (mul-term-by-all-terms t1 l)
+    (if (empty-termlist? l)
+	(the-empty-termlist)
+	(let ([t2 (first-term l)])
+	  (adjoin-term
+	   (make-term (+ (order t1) (order t2))
+		      (mul (coeff t1) (coeff t2)))
+	   (mul-term-by-all-terms t1 (rest-terms l))))))
+  ;; term-list representation: '((order coeff) (order coeff))
+  (define (adjoin-term term term-list)
+    (if (=zero? (coeff term))
+	term-list
+	(cons term term-list)))
+  (define (the-empty-termlist) '())
+  (define first-term car)
+  (define rest-terms cdr)
+  (define empty-termlist? null?)
+  (define (make-term order coeff) (list order coeff))
+  (define order car)
+  (define coeff cadr)
+  ;; term-list-dense representation: '(coeff coeff coeff)
+  (define (adjoin-term-dense term term-list)
+    (cond [(=zero? (coeff term)) term-list]
+	  [(< (order term)
+	      (- (length term-list) 1))
+	   (error "Term already in term list -- ADJOIN-TERM-DENSE"
+		  (list term term-list))]
+	  [else
+	   (append (list (coeff term))
+		   (make-list (- (order term) (length term-list)) 0)
+		   term-list)]))
+  (define (the-empty-termlist-dense) '())
+  (define (first-term-dense term-list)
+    (make-term (- (length term-list) 1)
+	       (car term-list)))
+  (define (rest-terms-dense term-list)
+    (cdr term-list))
+  (define empty-termlist-dense? null?)
+  ;; interface to rest of system
+  (define (tag p) (attach-tag 'polynomial p))
+  (put 'add '(polynomial polynomial)
+       (lambda (p1 p2) (tag (add-poly p1 p2))))
+  (put 'mul '(polynomial polynomial)
+       (lambda (p1 p2) (tag (mul-poly p1 p2))))
+  (put 'negate '(polynomial)
+       (lambda (p) (tag (negate-poly p))))
+  (put 'make 'polynomial
+       (lambda (var terms) (tag (make-poly var terms))))
+  (put '=zero? '(polynomial)
+       (lambda (x)
+	 (let ([terms (term-list x)])
+	   (andmap (lambda (term)
+		     (=zero? (coeff term)))
+		   terms))))
+  'done)
+(install-polynomial-package)
+(define (make-polynomial var terms)
+  ((get 'make 'polynomial) var terms))
