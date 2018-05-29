@@ -1,6 +1,7 @@
 #lang racket
 
 (require r5rs)
+(print-mpair-curly-braces #f)
 
 (define (zip . ls)
   (cond [(null? ls) '()]
@@ -9,7 +10,7 @@
                     (apply zip (cdr ls)))]))
 
 ;; Ex4.3 -- eval in data-directed approach
-(define (eval exp env)
+(define (my-eval exp env)
   (cond [(self-evaluating? exp) exp]
         [(variable? exp) (lookup-variable-value exp env)]
         ;; eval-rules is an assoc list of
@@ -27,7 +28,7 @@
 
 ;; thunks
 (define (actual-value exp env)
-  (force-it (eval exp env)))
+  (force-it (my-eval exp env)))
 
 ;; apply (different name so as not to shadow #<procedure:apply> from racket/base)
 (define (my-apply procedure arguments env)
@@ -73,53 +74,26 @@
       (cons (actual-value (first-operand exps) env)
             (list-of-arg-values (rest-operands exps)
                                 env))))
-#|
-;; delayed argument list
-(define (list-of-delayed-args exps env)
-  (if (no-operands? exps)
-      '()
-      (cons (delay-it (first-operand exps) env)
-            (list-of-delayed-args (rest-operands exps)
-                                  env))))
-|#
-#|                                   
-;; Ex4.1 -- list-of-values in alternative evaluation order
-;; rtl: right-to-left ; ltr: left-to-right
-(define (list-of-values-ltr exps env)
-  (if (no-operands? exp)
-      '()
-      (let ([a #f] [b #f])
-        (set! a (eval (first-operand exps) env))
-        (set! b (list-of-values (rest-operands exps) env))
-        (cons a b))))
-(define (list-of-values-rtl exps env)
-  (if (no-operands? exp)
-      '()
-      (let ([a #f] [b #f])
-        (set! b (list-of-values (rest-operands exps) env))
-        (set! a (eval (first-operand exps) env))
-        (cons a b))))
-|#
 
 ;; evaluate expressions
 
 (define (eval-if exp env)
   (if (true? (actual-value (if-predicate exp) env))
-      (eval (if-consequent exp) env)
-      (eval (if-alternative exp) env)))
+      (my-eval (if-consequent exp) env)
+      (my-eval (if-alternative exp) env)))
 
 ;; Ex4.4
 (define (eval-and exp env)
   (define (my-and terms)
     (cond [(null? terms) true]
-          [(null? (rest-terms terms)) (eval (first-term terms) env)]
-          [(false? (eval (first-term terms) env)) false]
+          [(null? (rest-terms terms)) (my-eval (first-term terms) env)]
+          [(false? (my-eval (first-term terms) env)) false]
           [else (my-and (rest-terms terms))]))
   (my-and (cdr exp)))
 (define (eval-or exp env)
   (define (my-or terms)
     (if (null? terms) false
-        (let ([first (eval (first-term terms) env)])
+        (let ([first (my-eval (first-term terms) env)])
           (if (true? first)
               first
               (my-or (rest-terms terms))))))
@@ -127,19 +101,19 @@
                      
 (define (eval-sequence exps env)
   (cond [(null? exps) (void)]
-        [(last-exp? exps) (eval (first-exp exps) env)]
-        [else (eval (first-exp exps) env)
+        [(last-exp? exps) (my-eval (first-exp exps) env)]
+        [else (my-eval (first-exp exps) env)
               (eval-sequence (rest-exps exps) env)]))
 
 (define (eval-assignment exp env)
   (set-variable-value! (assignment-variable exp)
-                       (eval (assignment-value exp) env)
+                       (my-eval (assignment-value exp) env)
                        env)
   'ok)
 
 (define (eval-definition exp env)
   (define-variable! (definition-variable exp)
-    (eval (definition-value exp) env)
+    (my-eval (definition-value exp) env)
     env)
   'ok)
 
@@ -337,7 +311,7 @@
   (cond [(unevaluated-thunk? obj)
          (let ([result (actual-value (thunk-exp obj)
                                      (thunk-env obj))])
-           (set-car! obj 'evaluated) ;; replace 'thunk with 'evaluated-thunk
+           (set-car! obj 'evaluated)       ;; replace 'thunk with 'evaluated
            (set-car! (cdr obj) result)     ;; replace exp with its value
            (set-cdr! (cdr obj) '())        ;; remove unneeded env
            result)]
@@ -423,9 +397,9 @@
                                         env)))
         (cons 'begin (lambda (exp env) (eval-sequence (begin-actions exp)
                                                       env)))
-        (cons 'let* (lambda (exp env) (eval (let*->nested-lets exp) env)))
-        (cons 'let (lambda (exp env) (eval (let->application exp) env)))
-        (cons 'cond (lambda (exp env) (eval (cond->if exp) env)))))
+        (cons 'let* (lambda (exp env) (my-eval (let*->nested-lets exp) env)))
+        (cons 'let (lambda (exp env) (my-eval (let->application exp) env)))
+        (cons 'cond (lambda (exp env) (my-eval (cond->if exp) env)))))
 
 ;; environment setup
 (define-syntax explode-objects
@@ -457,26 +431,21 @@
     initial-env))
 (define the-global-environment (setup-environment))
 
-(define input-prompt ";;; L-Eval input:")
-(define output-prompt ";;; L-Eval value:")
 (define (driver-loop)
-  (prompt-for-input input-prompt)
   (let ([input (read)])
-    (let ([output (actual-value input the-global-environment)])
-      (announce-output output-prompt)
-      (user-print output)))
-  (driver-loop))
-(define (prompt-for-input string)
-  (newline) (displayln string))
-(define (announce-output string)
-  (displayln string))
+    (unless (eq? eof input)
+      (let ([output (actual-value input the-global-environment)])
+        (user-print output))
+      (driver-loop))))
 (define (user-print object)
-  (if (compound-procedure? object)
-      (display (list 'compound-procedure
-                     (procedure-parameters object)
-                     (procedure-body object)
-                     '<procedure-env>))
-      (display object)))
+  (cond [(eq? object 'ok) (void)]
+        [(eq? object (void)) (void)]
+        [(compound-procedure? object)
+         (displayln (list 'compound-procedure
+                          (procedure-parameters object)
+                          (procedure-body object)
+                          '<procedure-env>))]
+        [else (displayln object)]))
 
 (driver-loop)
 
